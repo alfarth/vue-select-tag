@@ -1,0 +1,233 @@
+<?=$this->render('nucleo/componentes/paginacao');?>
+
+<?php
+$this->customHeadLink()
+    ->appendStylesheet($this->basePath('css/nucleo/app-vue/plugins/vue-select.css'));
+
+$this->customInlineScript()
+    ->appendFile($this->basePath('js/nucleo/app-vue/plugins/vue-select.js'))
+    ->appendFile($this->basePath('js/nucleo/app-vue/mixins/alert.js'))
+    ->appendFile($this->basePath('js/nucleo/app-vue/componentes/busca/select-tag.js'));
+?>
+
+<!-- Componente para seleção de informações configuráveis -->
+<template id="select-tag">
+    <div class="select-tag">
+        <div class="form-group">
+            <label class="">{{ label }}
+                <span
+                    class="fa fa-info-circle text-info"
+                    v-if="dsAjuda != null"
+                    data-toggle="popover"
+                    data-trigger="focus"
+                    data-html="true"
+                    :data-content="dsAjuda"
+                >
+                </span>
+            </label>
+            <div class=""
+                 v-bind:class="{ 'input-group': snHabilitarCadastro && !disabled }"
+            >
+                <v-select
+                    :options="arrOptions"
+                    :label="dsNome"
+                    :ds-chave="dsChave"
+                    v-model="modelTag"
+                    :disabled="disabled"
+                    :multiple="multiple"
+                    :loading="sn_carregando_registros"
+                    :placeholder="placeholder"
+                    @keydown.native.enter="carregarRegistrosPressEnter($event)"
+                    @keydown.native.esc="cancelarRegistrosEncontrados()"
+                    @input="changedSelecionados"
+                    v-on:input="onChangeSelecionados"
+                    @search:focus="carregarOpcoesPadrao"
+                >
+                    <template v-slot:no-options="{ search, searching }">
+                        <template v-if="searching">
+                            <div class="col-md-12 text-left">
+                                <span style="opacity: 0.7;"><?=$this->translate('Pressione [Enter] para pesquisar<br>[Esc] para limpar as opções');?></span>
+                            </div>
+                        </template>
+                        <em v-else>
+                            <div class="col-md-5">
+                                <span style="opacity: 0.7;"><?=$this->translate('Digite para pesquisar...');?></span>
+                            </div>
+                            <div class="col-md-2 pull-right">
+                                <div class="col-md-6">
+                                    <i class="cur-hand fa fa-tasks fa-lg"
+                                       @click="carregarTodasOpcoes()"
+                                       title="<?=$this->translate('Carregar todas opções');?>"
+                                    >
+                                    </i>
+                                </div>
+                                <div class="col-md-6">
+                                    <i class="cur-hand fa fa-refresh fa-lg"
+                                       @click="carregarOpcoesPadrao(true)"
+                                       title="<?=$this->translate('Carregar opções padrão');?>"
+                                    >
+                                    </i>
+                                </div>
+                            </div>
+                        </em>
+                    </template>
+                </v-select>
+
+                <span class="input-group-addon cur-hand"
+                      v-if="snHabilitarCadastro && !disabled"
+                      @click="abrirModalGerenciamento()"
+                      title="<?=$this->translate('Gerenciar')?>"
+                >
+                    <i class="fa fa-cog"
+                       aria-hidden="true"
+                    ></i>
+                </span>
+            </div>
+        </div>
+
+        <input type="hidden" id="mensagensSelectTag"
+               data-attr-msg-aviso="<?=$this->translate('Aviso')?>"
+               data-attr-msg-limite-selecao="<?=$this->translate('Limite de seleção atingido')?>"
+               data-attr-titulo-cadastrar-tag="<?=$this->translate('Você deseja incluir o registro?');?>"
+               data-attr-msg-cadastrar-tag="<?=$this->translate('Nenhum registro foi encontrado. Um novo registro será cadastrado na base de dados. Deseja continuar?');?>"
+               data-attr-msg-nenhum-registro-encontrado="<?=$this->translate('Nenhum registro foi encontrado.');?>"
+               data-attr-titulo-excluir-tag="<?=$this->translate('Você deseja remover o registro?');?>"
+               data-attr-msg-excluir-tag="<?=$this->translate('Ao confirmar você estará removendo o registro permanentemente da base de dados. Deseja continuar?');?>"
+               data-attr-btn-cancelar="<?=$this->translate('Não, cancelar!');?>"
+               data-attr-btn-confirmar="<?=$this->translate('Sim, continuar!');?>"
+               data-attr-msg-cadastro-erro="<?=$this->translate('Ocorreu um erro ao salvar o registro.');?>"
+               data-attr-msg-cadastro-sucesso="<?=$this->translate('Registro salvo com sucesso.');?>"
+               data-attr-msg-remover-erro="<?=$this->translate('Ocorreu um erro ao remover o registro.');?>"
+               data-attr-msg-remover-sucesso="<?=$this->translate('Registro removido com sucesso.');?>"
+        />
+
+        <input type="hidden" :id="getIdRota"
+               data-rota-componente="<?=$this->url('rota-admin-componentes')?>"
+        />
+
+        <div
+            class="modal fade"
+            :id="getIdModalGerenciamentoRegistros"
+            :name="getIdModalGerenciamentoRegistros"
+            role="dialog"
+            :aria-labelledby="getIdModalGerenciamentoRegistros"
+            aria-hidden="true"
+            data-backdrop="static"
+        >
+            <div class="modal-dialog modal-md">
+                <div class="modal-content">
+
+                    <div class="modal-header bg-primary">
+                        <h4 class="modal-title"><?=$this->translate('Gerenciar')?> <span class="text-muted">{{ labelGerenciar }}</span></h4>
+                    </div>
+
+                    <div class="modal-body">
+                        <form class="form-horizontal" style="min-height: 300px;">
+                            <div class="row">
+                                <div class="input-group col-md-8 pull-right">
+                                    <input type="text"
+                                           class="form-control"
+                                           v-model="ds_cadastrar"
+                                           placeholder="<?=$this->translate('Descrição')?>"
+                                    />
+                                    <span
+                                        class="input-group-addon cur-hand"
+                                        v-show="!cd_editar > 0"
+                                        @click="adicionarNovoRegistro()"
+                                        title="<?=$this->translate('Adicionar');?>"
+                                    >
+                                        <i class="fa fa-plus fa-lg text-info"></i>
+                                    </span>
+                                    <span
+                                        class="input-group-addon cur-hand"
+                                        v-show="cd_editar > 0"
+                                        @click="salvarAlteracaoRegistro()"
+                                        title="<?=$this->translate('Alterar');?>"
+                                    >
+                                        <i class="fa fa-check fa-lg text-success"></i>
+                                    </span>
+                                    <span
+                                        class="input-group-addon cur-hand"
+                                        v-show="cd_editar > 0"
+                                        @click="cancelarAlteracaoRegistro()"
+                                        title="<?=$this->translate('Cancelar');?>"
+                                    >
+                                        <i class="fa fa-times-circle-o fa-lg text-danger"></i>
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div class="row mar-top" v-show="sn_carregando_gerenciar">
+                                <div class="load5">
+                                    <div class="loader"></div>
+                                </div>
+                            </div>
+
+                            <div class="row mar-top" v-show="(arrGerenciar.length == 0) && !sn_carregando_gerenciar">
+                                <div class="alert alert-info" role="alert">
+                                    <?=$this->translate('Nenhum registro encontrado');?>
+                                </div>
+                            </div>
+
+                            <div class="row mar-top" v-show="(arrGerenciar.length > 0) && !sn_carregando_gerenciar">
+                                <div class="col-md-12">
+
+                                    <table class="table table-responsive table-striped text-sm">
+                                        <thead>
+                                        <th class="col-md-8">
+                                            <?=$this->translate("Descrição");?>
+                                        </th>
+                                        <th class="col-md-2 text-right">
+                                            <?=$this->translate("Ações");?>
+                                        </th>
+                                        </thead>
+                                        <tbody>
+                                        <tr v-for="(objGerenciar, index) in arrGerenciar" :key="index">
+                                            <td>{{ objGerenciar[dsNome] }}</td>
+                                            <td class="text-right">
+                                                    <span
+                                                        class="fa fa-pencil fa-lg text-primary cur-hand"
+                                                        title="<?=$this->translate('Editar');?>"
+                                                        @click="editarRegistro(index)"
+                                                    >
+                                                    </span>
+                                                <span
+                                                    class="fa fa-trash-o fa-lg text-danger cur-hand mar-lft"
+                                                    title="<?=$this->translate('Remover');?>"
+                                                    @click="removerRegistro(index)"
+                                                >
+                                                    </span>
+                                            </td>
+                                        </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </form>
+
+                        <!-- Paginação -->
+                        <paginacao
+                            :nr-pagina-atual="nr_pagina_atual"
+                            :arr-paginas="arrPaginas"
+                            :nr-registros-por-pagina="nr_registros_por_pagina"
+                            @ir-para-pagina="filtrosPaginacaoGerenciar($event.nr_pagina, $event.nr_registros_por_pagina)"
+                            :sn-itens-por-pagina="false"
+                        ></paginacao>
+                    </div>
+
+                    <!--Modal footer-->
+                    <div class="modal-footer">
+                        <div class="col-md-12 text-right">
+                            <button
+                                type="button"
+                                class="btn btn-default"
+                                @click="fecharModalGerenciamento()"
+                            ><?= $this->translate("Fechar"); ?></button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</template>
